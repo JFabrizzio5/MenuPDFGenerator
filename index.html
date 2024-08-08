@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Labeling</title>
+    <style>
+        #image-container {
+            position: relative;
+            display: inline-block;
+        }
+        #uploaded-image {
+            max-width: 100%;
+        }
+        .label {
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.7);
+            border: 1px solid #000;
+            padding: 2px;
+            cursor: move;
+            display: inline-block;
+            white-space: nowrap;
+        }
+        .label:hover {
+            background-color: rgba(255, 255, 0, 0.5);
+        }
+        .controls {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Subir Imagen y Añadir Etiquetas</h1>
+    <form id="upload-form" enctype="multipart/form-data">
+        <input type="file" id="image" name="image" accept="image/*" required>
+        <input type="text" id="items" name="items" placeholder="Artículos separados por coma" required>
+        <button type="submit">Subir Imagen</button>
+    </form>
+    <div id="image-container">
+        <img id="uploaded-image" src="" alt="" style="display: none;">
+    </div>
+    <div class="controls">
+        <button id="add-label-btn">Añadir Etiqueta</button>
+    </div>
+    <script>
+        const imageInput = document.getElementById('image');
+        const uploadedImage = document.getElementById('uploaded-image');
+        const container = document.getElementById('image-container');
+        const addLabelBtn = document.getElementById('add-label-btn');
+        let items = [];
+        let labelIndex = 1;
+
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                uploadedImage.src = event.target.result;
+                uploadedImage.style.display = 'block';
+                uploadedImage.onload = function() {
+                    container.querySelectorAll('.label').forEach(label => label.remove());
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+
+        const createLabel = (x, y, text) => {
+            const label = document.createElement('div');
+            label.className = 'label';
+            label.style.left = `${x}px`;
+            label.style.top = `${y}px`;
+            label.textContent = text;
+            container.appendChild(label);
+
+            label.onmousedown = (e) => {
+                e.preventDefault();
+                const shiftX = e.clientX - label.getBoundingClientRect().left;
+                const shiftY = e.clientY - label.getBoundingClientRect().top;
+
+                const moveAt = (pageX, pageY) => {
+                    label.style.left = `${pageX - shiftX}px`;
+                    label.style.top = `${pageY - shiftY}px`;
+                };
+
+                moveAt(e.pageX, e.pageY);
+
+                const onMouseMove = (e) => {
+                    moveAt(e.pageX, e.pageY);
+                };
+
+                document.addEventListener('mousemove', onMouseMove);
+
+                label.onmouseup = () => {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    label.onmouseup = null;
+                };
+            };
+
+            label.ondblclick = () => {
+                const newText = prompt("Edit label text:", label.textContent);
+                if (newText !== null) {
+                    label.textContent = newText;
+                }
+            };
+        };
+
+        addLabelBtn.addEventListener('click', () => {
+            const rect = uploadedImage.getBoundingClientRect();
+            const x = rect.width / 2;
+            const y = rect.height / 2;
+            const text = `Etiqueta ${labelIndex++}`;
+            createLabel(x, y, text);
+        });
+
+        uploadedImage.addEventListener('click', (e) => {
+            const rect = uploadedImage.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const text = prompt("Enter label text:");
+            if (text) {
+                createLabel(x, y, text);
+            }
+        });
+
+        document.getElementById('upload-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            items = document.getElementById('items').value.split(',');
+            fetch('http://localhost:5000/upload', {  // Cambia esta URL al backend que estés utilizando
+                method: 'POST',
+                body: JSON.stringify({
+                    image: uploadedImage.src,
+                    items: items,
+                    labels: Array.from(document.querySelectorAll('.label')).map(label => ({
+                        x: parseInt(label.style.left),
+                        y: parseInt(label.style.top),
+                        text: label.textContent
+                    }))
+                }),
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            }).then(response => response.json()).then(data => {
+                if (data.success) {
+                    alert('Imagen y etiquetas enviadas con éxito.');
+                } else {
+                    alert('Error al enviar los datos.');
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+            });
+        });
+    </script>
+</body>
+</html>
